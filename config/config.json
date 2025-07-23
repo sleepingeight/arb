@@ -1,8 +1,7 @@
 {
     "exchanges": [
         "okx",
-        "binance",
-        "bybit"
+        "deribit"
     ],
     "pairs": [
         "BTC/USDT"
@@ -12,7 +11,6 @@
     "latency_ms": 10,
     "fees": {
         "okx": 0.1,
-        "binance": 0.075,
-        "bybit": 0.08
+        "deribit": 0
     }
 }

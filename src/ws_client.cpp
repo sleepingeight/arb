@@ -1,6 +1,7 @@
 #include "ws_client.hpp"
 
 #include <iostream>
+#include <stdexcept>
 #include <string>
 
 using client = websocketpp::client<websocketpp::config::asio_tls_client>;
@@ -25,15 +26,13 @@ wsClient::wsClient(std::string hostname) {
   initialise(hostname);
 }
 
-int wsClient::initialise(std::string const &hostname) {
+void wsClient::initialise(std::string const &hostname) {
   std::string uri = "wss://" + hostname;
 
   websocketpp::lib::error_code ec;
   client::connection_ptr con = endpoint_.get_connection(uri, ec);
   if (ec) {
-    std::cout << "> Connect initialization error: " << ec.message()
-              << std::endl;
-    return -1;
+    throw std::runtime_error("unable to initialise connection");
   }
   hdl_ = con->get_handle();
 
@@ -49,17 +48,12 @@ int wsClient::initialise(std::string const &hostname) {
       websocketpp::lib::placeholders::_2));
 
   endpoint_.connect(con);
-
-  return 0;
 }
 
 wsClient::~wsClient() {
   endpoint_.stop_perpetual();
   websocketpp::lib::error_code ec;
   endpoint_.close(hdl_, websocketpp::close::status::going_away, "", ec);
-  if (ec) {
-    std::cout << "> Error closing connection: " << uri_ << "\n";
-  }
 
   thread_->join();
 }

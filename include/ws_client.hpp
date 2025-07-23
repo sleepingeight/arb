@@ -14,7 +14,7 @@ public:
   ~wsClient();
 
 private:
-  int initialise(std::string const &hostname);
+  void initialise(std::string const &hostname);
 
   context_ptr onTLSInit(websocketpp::connection_hdl);
   void onOpen(client *c, websocketpp::connection_hdl hdl);

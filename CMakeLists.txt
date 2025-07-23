@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 project(arb VERSION 1.0)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Boost REQUIRED COMPONENTS system thread)
@@ -26,7 +26,7 @@ FetchContent_MakeAvailable(simdjson)
 set(SOURCES
     src/main.cpp
     src/ws_client.cpp
-    src/config_loader.cpp
+    src/utils.cpp
 )
 
 add_executable(arb ${SOURCES})
