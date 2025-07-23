@@ -1,8 +1,9 @@
-#include <iostream>
-#include <memory>
+#include "simdjson.h"
+#include "config_loader.hpp"
 
-#include <simdjson.h>
-
-int main()
-{
+int main() {
+  simdjson::ondemand::parser kParser;
+  config kConfig;
+  const std::string kConfigPath = "../config/config.json";
+  loadConfig(kConfigPath, kConfig, kParser);
 }

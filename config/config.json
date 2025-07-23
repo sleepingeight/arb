@@ -1,0 +1,18 @@
+{
+    "exchanges": [
+        "okx",
+        "binance",
+        "bybit"
+    ],
+    "pairs": [
+        "BTC/USDT"
+    ],
+    "min_profit": 0.5,
+    "max_order_size": 10000,
+    "latency_ms": 10,
+    "fees": {
+        "okx": 0.1,
+        "binance": 0.075,
+        "bybit": 0.08
+    }
+}
