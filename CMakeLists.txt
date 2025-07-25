@@ -28,6 +28,7 @@ set(SOURCES
     src/ws_client.cpp
     src/utils.cpp
     src/orderbook.cpp
+    src/sqlite3.c
 )
 
 add_executable(arb ${SOURCES})

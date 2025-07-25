@@ -4,7 +4,6 @@
 #include <semaphore>
 #include <simdjson.h>
 
-#include <atomic>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -64,7 +63,7 @@ void wsClient::initialise(std::string const& hostname)
 
     endpoint_.connect(con);
 
-    snapshot_.newData.store(false, std::memory_order_release);
+    snapshot_.newData = false;
 }
 
 wsClient::~wsClient()
@@ -146,7 +145,7 @@ void wsClient::onMessage(websocketpp::connection_hdl hdl, client::message_ptr ms
         }
         snapshot_.bidSize = i;
     }
-    snapshot_.newData.store(true, std::memory_order_release);
+    snapshot_.newData = true;
     sem.release();
 }
 

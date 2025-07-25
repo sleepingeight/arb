@@ -1,5 +1,6 @@
 #pragma once
 
+#include <semaphore>
 #include <string_view>
 #include <array>
 #include <string>
@@ -32,4 +33,5 @@ void loadConfig(const std::string&, config&, simdjson::ondemand::parser&);
 int getIndex(std::string_view, int);
 
 extern std::counting_semaphore<2> sem;
+extern std::counting_semaphore<2> sem1;
 

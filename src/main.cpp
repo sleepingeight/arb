@@ -7,6 +7,8 @@
 
 
 std::counting_semaphore<2> sem(0);
+std::counting_semaphore<2> sem1(0);
+
 
 int main()
 {

@@ -1,34 +1,33 @@
 #include "orderbook.hpp"
 #include "utils.hpp"
-#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstring>
 #include <semaphore>
 #include <vector>
+#include "sqlite3.h"
+
 
 void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Opportunity>& out_opps)
 {
     int num_orderboks = orderbooks.size();
     double buy_qty[kMaxSize], buy_cost[kMaxSize];
     double sell_qty[kMaxSize], sell_cost[kMaxSize];
-    std::vector<L2OrderBookLocal> local_books(num_orderboks);
+    std::vector<L2OrderBook> local_books(num_orderboks);
     while (true) {
         sem.acquire();
         bool should_process = false;
         int count_new = 0;
         size_t new_data_index = -1;
         for (size_t i = 0; i < kTotalExchanges; i++) {
-            bool is_new = orderbooks[i].newData.load(std::memory_order_acquire);
-            memcpy(&local_books[i], &orderbooks[i], 1616);
-            orderbooks[i].newData.store(false, std::memory_order_release);
-            count_new = i;
-            if(is_new) break;
+            bool is_new = orderbooks[i].newData;
+            if(is_new) {
+                memcpy(&local_books[i], &orderbooks[i], sizeof (L2OrderBook));
+                orderbooks[i].newData = false;
+                count_new = i;
+                break;
+            }
         }
-        // if (!should_process){
-        //     std::this_thread::sleep_for(std::chrono::microseconds(50));
-        //     continue;
-        // }
 
         int buy_n = 0, sell_n = 0;
 
@@ -111,4 +110,85 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - local_books[count_new].t);
         // std::cout << "" << duration.count() << "" << '\n';    
     }
+}
+
+
+
+int dbWriterThread(L2OrderBook* ob) {
+    sqlite3* db;
+    if (sqlite3_open("orderbook_summary.db", &db)) {
+        std::cerr << "DB open failed\n";
+        return -1;
+    }
+
+    const char* createTableSQL = R"(
+        CREATE TABLE IF NOT EXISTS OrderBook (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp INTEGER,
+            topAsk REAL,
+            topAskQty REAL,
+            topBid REAL,
+            topBidQty REAL,
+            midPrice REAL,
+            spread REAL,
+            imbalance REAL
+        );
+    )";
+
+    char* errMsg = nullptr;
+    if (sqlite3_exec(db, createTableSQL, nullptr, nullptr, &errMsg) != SQLITE_OK) {
+        std::cerr << "Table creation failed: " << errMsg << "\n";
+        sqlite3_free(errMsg);
+        sqlite3_close(db);
+        return -1;
+    }
+
+    while (true) {
+        sem1.acquire();
+
+        const char* sql = R"(
+            INSERT INTO OrderBook (
+                timestamp, topAsk, topAskQty, topBid, topBidQty, midPrice, spread, imbalance
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        )";
+
+        sqlite3_stmt* stmt;
+        if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            std::cerr << "Prepare failed: " << sqlite3_errmsg(db) << "\n";
+            return -1;
+        }
+    
+        sqlite3_exec(db, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
+    
+        double topAsk = ob->askPrice[0];
+        double topAskQty = ob->askQuantity[0];
+        double topBid = ob->bidPrice[0];
+        double topBidQty = ob->bidQuantity[0];
+    
+        double mid = (topAsk + topBid) / 2.0;
+        double spread = topAsk - topBid;
+        double imbalance = (topBidQty - topAskQty) / (topBidQty + topAskQty + 1e-9);
+    
+        int idx = 1;
+        auto ts = std::chrono::duration_cast<std::chrono::microseconds>(ob->t.time_since_epoch()).count();
+    
+        sqlite3_bind_int64(stmt, idx++, ts);
+        sqlite3_bind_double(stmt, idx++, topAsk);
+        sqlite3_bind_double(stmt, idx++, topAskQty);
+        sqlite3_bind_double(stmt, idx++, topBid);
+        sqlite3_bind_double(stmt, idx++, topBidQty);
+        sqlite3_bind_double(stmt, idx++, mid);
+        sqlite3_bind_double(stmt, idx++, spread);
+        sqlite3_bind_double(stmt, idx++, imbalance);
+    
+        if (sqlite3_step(stmt) != SQLITE_DONE) {
+            std::cerr << "Insert failed: " << sqlite3_errmsg(db) << "\n";
+        }
+    
+        sqlite3_reset(stmt);
+        sqlite3_finalize(stmt);
+        sqlite3_exec(db, "END TRANSACTION;", nullptr, nullptr, nullptr);
+    }
+
+    sqlite3_close(db);
 }
