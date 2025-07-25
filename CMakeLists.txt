@@ -18,7 +18,7 @@ FetchContent_MakeAvailable(websocketpp)
 FetchContent_Declare(
   simdjson
   GIT_REPOSITORY https://github.com/simdjson/simdjson.git
-  GIT_TAG tags/v3.10.0
+  GIT_TAG tags/v3.13.0
   GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(simdjson)
@@ -27,10 +27,11 @@ set(SOURCES
     src/main.cpp
     src/ws_client.cpp
     src/utils.cpp
+    src/orderbook.cpp
 )
 
 add_executable(arb ${SOURCES})
-
+# target_compile_definitions(arb PRIVATE SIMDJSON_VERBOSE_LOGGING)
 target_include_directories(arb
     PRIVATE
         ${Boost_INCLUDE_DIRS}

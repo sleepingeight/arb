@@ -3,8 +3,7 @@
 #include <string_view>
 #include <array>
 #include <string>
-#include "simdjson.h"
-#include "ws_client.hpp"
+#include <simdjson.h>
 
 const int kTotalExchanges = 3;
 const int kTotalPairs = 3;
@@ -15,6 +14,7 @@ constexpr std::array<std::string_view, kTotalExchanges> kHostNames = {
     "ws.gomarket-cpp.goquant.io/ws/l2-orderbook/deribit/",
     "ws.gomarket-cpp.goquant.io/ws/l2-orderbook/bybit/"
 };
+constexpr std::array<bool, kTotalExchanges> kUseDoubleInString = {true, false, true};
 
 /*
 reordering for proper packing of struct without any space wastage
@@ -30,5 +30,3 @@ struct config {
 
 void loadConfig(const std::string&, config&, simdjson::ondemand::parser&);
 int getIndex(std::string_view, int);
-
-void connectToEndpoints(const config&, std::vector<std::unique_ptr<wsClient>>&);

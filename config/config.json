@@ -1,7 +1,6 @@
 {
     "exchanges": [
-        "okx",
-        "deribit"
+        "bybit"
     ],
     "pairs": [
         "BTC/USDT"
@@ -10,7 +9,6 @@
     "max_order_size": 10000,
     "latency_ms": 10,
     "fees": {
-        "okx": 0.1,
-        "deribit": 0
+        "bybit": 0.1
     }
 }

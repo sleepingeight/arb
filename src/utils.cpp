@@ -1,9 +1,6 @@
 #include "utils.hpp"
-#include "ws_client.hpp"
 #include <exception>
-#include <memory>
 #include <stdexcept>
-#include <format>
 #include <string_view>
 
 void loadConfig(const std::string& file_path, config& config, simdjson::ondemand::parser& parser) {
@@ -25,7 +22,7 @@ void loadConfig(const std::string& file_path, config& config, simdjson::ondemand
     bool empty_pairs = true;
     for (auto pair: object["pairs"]) {
         int index = getIndex(pair.get_string(), 2);
-        if (index == -1) throw std::runtime_error("unknown pair.\narb supported pairs: BTC/USDT, ETH/USDT");
+        if (index == -1) throw std::runtime_error("unknown pair.\narb supported pairs: BTC/USDT, ETH/USDT, SOL/USDT");
         config.pairs[index] = true;
         empty_pairs = false;
     }
@@ -62,46 +59,3 @@ int getIndex(std::string_view name, int type) {
     }
     return -1;
 }
-
-void connectToEndpoints(const config& config, std::vector<std::unique_ptr<wsClient>>& clients) {
-    for(size_t i = 0; i < kTotalExchanges; i++) {
-        if(config.exchanges[i]) {
-            for(size_t j = 0; j < kTotalPairs; j++) {
-                if (!config.pairs[j]) continue;
-
-                const auto& exchange = kExchanges[i];
-                const auto& pair_sv = kPairs[j];
-
-                auto pos = pair_sv.find('/');
-                std::string_view base = pair_sv.substr(0, pos);
-                std::string_view quote = pair_sv.substr(pos + 1);
-
-                std::string hostname = "ws.gomarket-cpp.goquant.io/ws/l2-orderbook/";
-
-                switch (i) {
-                    case 0:
-                        hostname += std::format("{}/{}-{}", exchange, base, quote);
-                        break;
-                    case 1:
-                        hostname += std::format("{}/{}_{}", exchange, base, quote);
-                        break;
-                    case 2:
-                        hostname +=  std::format("{}/{}{}/spot", exchange, base, quote);
-                        break;
-                }          
-                std::cout << "hostname: " << hostname << "\n\n";
-                try {
-                    clients.emplace_back(std::make_unique<wsClient>(hostname));
-                }
-                catch (std::exception &e) {
-                    std::cerr << "unable to connect to endpoint wss://" << hostname << "\nerror: " 
-                        << e.what() << "\n";
-                }
-            }
-        }
-    } 
-
-
-
-
-}   
