@@ -3,6 +3,14 @@
 #include <stdexcept>
 #include <string_view>
 
+/**
+ * Implementation notes:
+ * - Uses simdjson for zero-copy JSON parsing
+ * - Validates all required configuration fields
+ * - Ensures 1-1 mapping between exchanges and fees
+ * - Performs type checking on numeric values
+ * - Exits with failure on invalid configuration
+ */
 void loadConfig(const std::string& file_path, config& config, simdjson::ondemand::parser& parser) {
   auto json = simdjson::padded_string::load("../config/config.json");
   simdjson::ondemand::document doc = parser.iterate(json); 
@@ -19,15 +27,17 @@ void loadConfig(const std::string& file_path, config& config, simdjson::ondemand
     if (empty_exchanges)
         throw std::runtime_error("found empty exchanges.\nplease fill config.json");
 
-    bool empty_pairs = true;
+    int num_pairs = 0;
     for (auto pair: object["pairs"]) {
         int index = getIndex(pair.get_string(), 2);
         if (index == -1) throw std::runtime_error("unknown pair.\narb supported pairs: BTC/USDT, ETH/USDT, SOL/USDT");
         config.pairs[index] = true;
-        empty_pairs = false;
+        num_pairs++;
     }
-    if (empty_pairs)
+    if (num_pairs == 0)
         throw std::runtime_error("found empty pairs.\nplease fill config.json");
+    if (num_pairs > 1)
+        throw std::runtime_error("sorry, currently only one pair is supported.\n");
 
     config.min_profit = object["min_profit"].get_double();
     config.max_order_size = object["max_order_size"].get_double();
@@ -46,6 +56,14 @@ void loadConfig(const std::string& file_path, config& config, simdjson::ondemand
   }
 }
 
+/**
+ * Implementation notes:
+ * - Uses string_view for efficient string comparison
+ * - Linear search optimized for small arrays
+ * - Type parameter determines search target:
+ *   1: Exchange names
+ *   2: Trading pairs
+ */
 int getIndex(std::string_view name, int type) {
     if(type == 1) {
         for(int i = 0; i < kTotalExchanges; i++) {

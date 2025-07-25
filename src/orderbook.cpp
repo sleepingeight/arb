@@ -7,7 +7,14 @@
 #include <vector>
 #include "sqlite3.h"
 
-
+/**
+ * Implementation notes:
+ * - Uses semaphore synchronization for thread safety
+ * - Maintains local copy of orderbooks to prevent data races
+ * - Calculates VWAP using cumulative quantities and costs
+ * - Optimizes memory access with aligned data structures
+ * - Processes opportunities in O(n) time per orderbook update
+ */
 void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Opportunity>& out_opps)
 {
     int num_orderboks = orderbooks.size();
@@ -112,8 +119,13 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
     }
 }
 
-
-
+/**
+ * Implementation notes:
+ * - Uses SQLite transactions for atomic writes
+ * - Calculates derived metrics (spread, imbalance)
+ * - Handles database errors gracefully
+ * - Maintains continuous operation through semaphore synchronization
+ */
 int dbWriterThread(L2OrderBook* ob) {
     sqlite3* db;
     if (sqlite3_open("orderbook_summary.db", &db)) {

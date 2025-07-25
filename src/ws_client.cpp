@@ -16,6 +16,13 @@ using client = websocketpp::client<websocketpp::config::asio_tls_client>;
 using context_ptr
     = websocketpp::lib::shared_ptr<websocketpp::lib::asio::ssl::context>;
 
+/**
+ * Implementation notes:
+ * - Uses WebSocket++ for asynchronous WebSocket communication
+ * - Configures TLS for secure connections
+ * - Sets up logging and error channels
+ * - Initializes perpetual connection mode
+ */
 wsClient::wsClient(std::string hostname, bool double_in_string,
     L2OrderBook& orderbook)
     : snapshot_(orderbook), double_in_string_(double_in_string)
@@ -37,6 +44,12 @@ wsClient::wsClient(std::string hostname, bool double_in_string,
     initialise(hostname);
 }
 
+/**
+ * Implementation notes:
+ * - Sets up error handlers and message callbacks
+ * - Validates connection parameters
+ * - Initializes connection in non-blocking mode
+ */
 void wsClient::initialise(std::string const& hostname)
 {
     std::string uri = "wss://" + hostname;
@@ -66,6 +79,11 @@ void wsClient::initialise(std::string const& hostname)
     snapshot_.newData = false;
 }
 
+/**
+ * Implementation notes:
+ * - Ensures clean shutdown of WebSocket connection
+ * - Waits for client thread to complete
+ */
 wsClient::~wsClient()
 {
     endpoint_.stop_perpetual();
@@ -75,12 +93,24 @@ wsClient::~wsClient()
     thread_->join();
 }
 
+/**
+ * Implementation notes:
+ * - Updates connection status
+ * - Ready for subscription messages if needed
+ */
 void wsClient::onOpen(client* c, websocketpp::connection_hdl hdl)
 {
     status_ = "Open";
     client::connection_ptr con = c->get_con_from_hdl(hdl);
 }
 
+/**
+ * Implementation notes:
+ * - Uses simdjson for zero-copy JSON parsing
+ * - Handles both string and numeric price/quantity formats
+ * - Updates orderbook atomically
+ * - Signals processing thread via semaphore
+ */
 void wsClient::onMessage(websocketpp::connection_hdl hdl, client::message_ptr msg)
 {
     snapshot_.t = std::chrono::high_resolution_clock::now();
@@ -149,6 +179,11 @@ void wsClient::onMessage(websocketpp::connection_hdl hdl, client::message_ptr ms
     sem.release();
 }
 
+/**
+ * Implementation notes:
+ * - Captures detailed error information
+ * - Updates connection status for monitoring
+ */
 void wsClient::onFail(client* c, websocketpp::connection_hdl hdl)
 {
     status_ = "Failed";
@@ -156,11 +191,21 @@ void wsClient::onFail(client* c, websocketpp::connection_hdl hdl)
     err_reason_ = con->get_ec().message();
 }
 
+/**
+ * Implementation notes:
+ * - Updates connection status for clean shutdown
+ */
 void wsClient::onClose(client* c, websocketpp::connection_hdl hdl)
 {
     status_ = "Closed";
 }
 
+/**
+ * Implementation notes:
+ * - Configures modern TLS options
+ * - Disables legacy SSL protocols
+ * - Enables perfect forward secrecy
+ */
 context_ptr
 wsClient::onTLSInit(websocketpp::connection_hdl)
 {
@@ -178,6 +223,12 @@ wsClient::onTLSInit(websocketpp::connection_hdl)
     return ctx;
 }
 
+/**
+ * Implementation notes:
+ * - Dynamically constructs WebSocket URLs based on exchange format
+ * - Handles connection errors gracefully
+ * - Creates unique client instances per exchange/pair
+ */
 void connectToEndpoints(const config& config, std::vector<std::unique_ptr<wsClient>>& clients, std::vector<L2OrderBook>& orderbooks) {
     for(size_t i = 0; i < kTotalExchanges; i++) {
         if(config.exchanges[i]) {
