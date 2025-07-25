@@ -5,6 +5,7 @@
 #include <websocketpp/config/asio_client.hpp>
 #include <simdjson.h>
 #include "orderbook.hpp"
+#include "utils.hpp"
 
 using client = websocketpp::client<websocketpp::config::asio_tls_client>;
 using context_ptr = websocketpp::lib::shared_ptr<boost::asio::ssl::context>;

@@ -1,6 +1,7 @@
 #include "ws_client.hpp"
 
 #include <cstdlib>
+#include <semaphore>
 #include <simdjson.h>
 
 #include <atomic>
@@ -10,6 +11,7 @@
 #include <format>
 
 #include "orderbook.hpp"
+#include "utils.hpp"
 
 using client = websocketpp::client<websocketpp::config::asio_tls_client>;
 using context_ptr
@@ -85,29 +87,31 @@ void wsClient::onMessage(websocketpp::connection_hdl hdl, client::message_ptr ms
     snapshot_.t = std::chrono::high_resolution_clock::now();
     simdjson::ondemand::document doc = parser_.iterate(msg->get_raw_payload());
     simdjson::ondemand::object object = doc.get_object();
-    std::cout << msg->get_raw_payload() << "\n";
+    // std::cout << msg->get_raw_payload() << "\n";
 
     simdjson::ondemand::value asks;
     auto err = doc["asks"].get(asks);
 
     int i = 0;
     if (err == simdjson::SUCCESS) {
-        std::cout << "got asks\n";
         for (auto ask : asks) {
             int j = 0;
             for (auto val : ask) {
                 if (j == 0) {
                     if (double_in_string_) {
-                        snapshot_.askQuantity[i] = val.get_double_in_string();
-                    } else {
-                        snapshot_.askQuantity[i] = val.get_double();
-                    }
-                    j++;
-                } else {
-                    if (double_in_string_) {
                         snapshot_.askPrice[i] = val.get_double_in_string();
                     } else {
                         snapshot_.askPrice[i] = val.get_double();
+                    }
+                    #ifdef FAKE
+                    snapshot_.askPrice[i] -= 10000;
+                    #endif
+                    j++;
+                } else {
+                    if (double_in_string_) {
+                        snapshot_.askQuantity[i] = val.get_double_in_string();
+                    } else {
+                        snapshot_.askQuantity[i] = val.get_double();
                     }
                 }
             }
@@ -115,7 +119,6 @@ void wsClient::onMessage(websocketpp::connection_hdl hdl, client::message_ptr ms
         }
     }
     snapshot_.askSize = i;
-    std::cout << "\n\nno. of asks " << i << "\n";
 
     i = 0;
     simdjson::ondemand::array bids;
@@ -142,9 +145,9 @@ void wsClient::onMessage(websocketpp::connection_hdl hdl, client::message_ptr ms
             i++;
         }
         snapshot_.bidSize = i;
-        std::cout << "no. of bids " << i << "\n";
     }
     snapshot_.newData.store(true, std::memory_order_release);
+    sem.release();
 }
 
 void wsClient::onFail(client* c, websocketpp::connection_hdl hdl)

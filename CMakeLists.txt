@@ -32,6 +32,7 @@ set(SOURCES
 
 add_executable(arb ${SOURCES})
 # target_compile_definitions(arb PRIVATE SIMDJSON_VERBOSE_LOGGING)
+target_compile_definitions(arb PRIVATE FAKE)
 target_include_directories(arb
     PRIVATE
         ${Boost_INCLUDE_DIRS}

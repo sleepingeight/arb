@@ -1,9 +1,10 @@
 #include "orderbook.hpp"
 #include "utils.hpp"
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstring>
-#include <thread>
+#include <semaphore>
 #include <vector>
 
 void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Opportunity>& out_opps)
@@ -11,25 +12,24 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
     int num_orderboks = orderbooks.size();
     double buy_qty[kMaxSize], buy_cost[kMaxSize];
     double sell_qty[kMaxSize], sell_cost[kMaxSize];
-
     std::vector<L2OrderBookLocal> local_books(num_orderboks);
     while (true) {
+        sem.acquire();
         bool should_process = false;
         int count_new = 0;
-        size_t i = 0;
-        for (auto& orderbook : orderbooks) {
-            bool is_new = orderbook.newData.load(std::memory_order_acquire);
-            count_new += is_new;
-            should_process |= is_new;
+        size_t new_data_index = -1;
+        for (size_t i = 0; i < kTotalExchanges; i++) {
+            bool is_new = orderbooks[i].newData.load(std::memory_order_acquire);
             memcpy(&local_books[i], &orderbooks[i], 1616);
-            i++;
-            orderbook.newData.store(false, std::memory_order_release);
+            orderbooks[i].newData.store(false, std::memory_order_release);
+            count_new = i;
+            if(is_new) break;
         }
+        // if (!should_process){
+        //     std::this_thread::sleep_for(std::chrono::microseconds(50));
+        //     continue;
+        // }
 
-        if (!should_process){
-            std::this_thread::sleep_for(std::chrono::microseconds(50));
-            continue;
-        }
         int buy_n = 0, sell_n = 0;
 
         for (int i = 0; i < kTotalExchanges; ++i) {
@@ -54,7 +54,6 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
                 if (buy_n == 0)
                     continue;
             }
-            std::cout << "processing\n";
 
             for (int j = 0; j < kTotalExchanges; ++j) {
                 if (!cfg.exchanges[j])
@@ -78,8 +77,6 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
                     if (sell_n == 0)
                         continue;
                 }
-                std::cout << "processing\n";
-                // two-pointer sweep
                 int bi = 0, si = 0;
                 while (bi < buy_n && si < sell_n) {
                     double common_qty = (buy_qty[bi] < sell_qty[si] ? buy_qty[bi] : sell_qty[si]);
@@ -110,5 +107,8 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
                 }
             }
         }
+        std::chrono::high_resolution_clock::time_point end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - local_books[count_new].t);
+        // std::cout << "" << duration.count() << "" << '\n';    
     }
 }

@@ -11,7 +11,7 @@ struct alignas(64) L2OrderBook {
     double askPrice[kMaxSize];
     double bidQuantity[kMaxSize];
     double bidPrice[kMaxSize];
-    std::chrono::system_clock::time_point t;
+    std::chrono::high_resolution_clock::time_point t;
     int askSize;
     int bidSize;
     std::atomic<bool> newData;
@@ -22,7 +22,7 @@ struct alignas(64) L2OrderBookLocal {
     double askPrice[kMaxSize];
     double bidQuantity[kMaxSize];
     double bidPrice[kMaxSize];
-    std::chrono::system_clock::time_point t;
+    std::chrono::high_resolution_clock::time_point t;
     int askSize;
     int bidSize;
 };
