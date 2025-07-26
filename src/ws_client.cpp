@@ -132,7 +132,7 @@ void wsClient::onMessage(websocketpp::connection_hdl hdl, client::message_ptr ms
                         snapshot_.askPrice[i] = val.get_double();
                     }
                     #ifdef FAKE
-                    snapshot_.askPrice[i] -= 2;
+                    snapshot_.askPrice[i] -= 1000;
                     #endif
                     j++;
                 } else {

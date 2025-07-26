@@ -117,9 +117,11 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
 
                     if (net_profit >= cfg.min_profit) {
                         auto now = std::chrono::high_resolution_clock::now();
+                        if (local_books[count_new].t.time_since_epoch().count() <= 0) continue;
+                        if(now < local_books[count_new].t) continue;
                         auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
                             now - local_books[count_new].t).count();
-                            
+                        
                         out_opps.push_back({
                             i, j,
                             bi + 1,
