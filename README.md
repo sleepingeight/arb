@@ -123,6 +123,7 @@ This implementation allows us to:
 ## Building
 
 ```bash
+sudo apt install libboost-dev libssl-dev
 mkdir build
 cd build
 cmake -G Ninja ..
