@@ -28,6 +28,9 @@ constexpr std::array<std::string_view, kTotalExchanges> kHostNames = {
 /// @brief Flag indicating whether each exchange uses string representation for doubles
 constexpr std::array<bool, kTotalExchanges> kUseDoubleInString = {true, false, true};
 
+const std::string kOppStoragePath = "../storage/opportunities.txt";
+const std::string kDbStoragePath = "../storage/orderbook_summary.db";
+
 /**
  * @brief Configuration structure for the trading system
  * 

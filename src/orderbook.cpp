@@ -6,10 +6,12 @@
 #include <semaphore>
 #include <vector>
 #include "sqlite3.h"
+#include <fstream>
+#include <iomanip>
+#include <array>
 
 // Forward declaration of global variables from main.cpp
 extern struct Metrics g_metrics;
-extern std::atomic<bool> g_can_print;
 
 /**
  * Implementation notes:
@@ -28,7 +30,6 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
     
     while (true) {
         sem.acquire();
-        g_can_print.store(false, std::memory_order_relaxed);
         g_metrics.updates_processed++;
         out_opps.clear();
         int count_new = 0;
@@ -42,7 +43,7 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
         }
 
         int buy_n = 0, sell_n = 0;
-        out_opps.clear();  // Clear previous opportunities
+        out_opps.clear();
 
         for (int i = 0; i < kTotalExchanges; ++i) {
             if (!cfg.exchanges[i])
@@ -126,7 +127,6 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
                 }
             }
         }
-        g_can_print.store(true, std::memory_order_relaxed);
         memcpy(&new_ob, &local_books[count_new], sizeof(L2OrderBook));
         sem1.release();
     }
@@ -141,8 +141,16 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
  */
 int dbWriterThread(std::vector<Opportunity>&oppurtunities, L2OrderBook& ob) {
     sqlite3* db;
-    if (sqlite3_open("orderbook_summary.db", &db)) {
+    if (sqlite3_open(kDbStoragePath.c_str(), &db)) {
         std::cerr << "DB open failed\n";
+        return -1;
+    }
+
+    // Open opportunities file for append
+    std::ofstream opps_file(kOppStoragePath, std::ios::app);
+    if (!opps_file) {
+        std::cerr << "Failed to open opportunities.txt\n";
+        sqlite3_close(db);
         return -1;
     }
 
@@ -168,8 +176,30 @@ int dbWriterThread(std::vector<Opportunity>&oppurtunities, L2OrderBook& ob) {
         return -1;
     }
 
+    std::vector<Opportunity> local_opps;
+
     while (true) {
         sem1.acquire();
+
+        local_opps = oppurtunities;
+
+        for (const auto& opp : local_opps) {
+            opps_file << "\nArbitrage Opportunity:\n"
+                     << "Buy on " << kExchanges[opp.buy_exchange] 
+                     << " at " << std::fixed << std::setprecision(2) << opp.buy_vwap
+                     << " using " << opp.buy_levels << " levels\n"
+                     << "Sell on " << kExchanges[opp.sell_exchange]
+                     << " at " << opp.sell_vwap
+                     << " using " << opp.sell_levels << " levels\n"
+                     << "Profit: " << std::setprecision(3) << opp.profit_pct << "%\n"
+                     << "Order Size: " << std::setprecision(6) << opp.order_size << " BTC\n"
+                     << "Market Impact: " << (opp.buy_levels + opp.sell_levels) << " levels deep\n"
+                     << "Detection Latency: " << std::fixed << std::setprecision(2) 
+                     << opp.detection_latency_us << " μs\n"
+                     << std::string(50, '-') << "\n";
+        }
+        opps_file.flush();
+
         const char* sql = R"(
             INSERT INTO OrderBook (
                 timestamp, topAsk, topAskQty, topBid, topBidQty, midPrice, spread, imbalance
@@ -214,5 +244,6 @@ int dbWriterThread(std::vector<Opportunity>&oppurtunities, L2OrderBook& ob) {
         sqlite3_exec(db, "END TRANSACTION;", nullptr, nullptr, nullptr);
     }
 
+    opps_file.close();
     sqlite3_close(db);
 }

@@ -5,15 +5,13 @@
 #include <memory>
 #include <simdjson.h>
 #include <atomic>
-#include <iomanip>
 #include <thread>
 #include <chrono>
-
-// Global control flags
-std::atomic<bool> g_running = true;
-std::atomic<bool> g_display_opportunities = false;
-std::atomic<int> g_min_profit_filter = 0;  // in basis points
-std::atomic<bool> g_can_print = true;
+#include <fstream>
+#include <sys/sysinfo.h>
+#include <sys/resource.h>
+#include <unistd.h>
+#include <iomanip> 
 
 // Synchronisation
 std::counting_semaphore<2> sem(0);
@@ -25,13 +23,44 @@ Metrics g_metrics;
 // Websocket clients
 std::vector<std::unique_ptr<wsClient>> connections;
 
+void displaySystemDetails() {
+    struct sysinfo si;
+    if (sysinfo(&si) == 0) {
+        double total_ram = si.totalram * si.mem_unit / (1024.0 * 1024.0);
+        double free_ram = si.freeram * si.mem_unit / (1024.0 * 1024.0);
+        double used_ram = total_ram - free_ram;
+
+        struct rusage usage;
+        getrusage(RUSAGE_SELF, &usage);
+
+        long num_cores = sysconf(_SC_NPROCESSORS_ONLN);
+        int current_pid = getpid();
+
+        std::cout << "\nSystem Details:\n"
+                  << "CPU Cores: " << num_cores << "\n"
+                  << "Active Threads: " << std::thread::hardware_concurrency() << "\n"
+                  << "Process ID: " << current_pid << "\n"
+                  << "\nMemory Usage:\n"
+                  << "  Total RAM: " << std::fixed << std::setprecision(2) << total_ram << " MB\n"
+                  << "  Used RAM: " << used_ram << " MB\n"
+                  << "  Free RAM: " << free_ram << " MB\n"
+                  << "\nProcess Resources:\n"
+                  << "  User CPU Time: " << usage.ru_utime.tv_sec << "." 
+                  << std::setfill('0') << std::setw(6) << usage.ru_utime.tv_usec << " seconds\n"
+                  << "  System CPU Time: " << usage.ru_stime.tv_sec << "." 
+                  << std::setfill('0') << std::setw(6) << usage.ru_stime.tv_usec << " seconds\n"
+                  << "  Max RSS: " << (usage.ru_maxrss / 1024.0) << " MB\n\n";
+    } else {
+        std::cerr << "Failed to get system information\n";
+    }
+}
+
 void displayHelp() {
     std::cout << "\nAvailable Commands:\n"
               << "  h, help     - Show this help message\n"
-              << "  s, start    - Start displaying opportunities\n"
-              << "  p, stop     - Pause opportunity display\n"
+              << "  s, start    - Start displaying opportunities (displays only 10 at a time)\n"
               << "  m, metrics  - Show performance metrics\n"
-              << "  f N         - Filter opportunities with profit >= N basis points\n"
+              << "  y, system   - Show system details and resource usage\n"
               << "  q, quit     - Exit the program\n"
               << "\n";
 }
@@ -60,30 +89,37 @@ void displayMetrics() {
     std::cout << "\n";
 }
 
-void displayOpportunity(const Opportunity& opp) {
-    static const std::array<std::string, 3> exchanges = {"OKX", "Deribit", "Bybit"};
-    
-    std::cout << "\nArbitrage Opportunity:\n"
-              << "Buy on " << exchanges[opp.buy_exchange] 
-              << " at " << std::fixed << std::setprecision(2) << opp.buy_vwap
-              << " using " << opp.buy_levels << " levels\n"
-              << "Sell on " << exchanges[opp.sell_exchange]
-              << " at " << opp.sell_vwap
-              << " using " << opp.sell_levels << " levels\n"
-              << "Profit: " << std::setprecision(3) << opp.profit_pct << "%\n"
-              << "Order Size: " << std::setprecision(6) << opp.order_size << " BTC\n"
-              << "Market Impact: " << (opp.buy_levels + opp.sell_levels) << " levels deep\n"
-              << "Detection Latency: " << std::fixed << std::setprecision(2) 
-              << opp.detection_latency_us << " μs\n"
-              << std::string(50, '-') << "\n";
+void displayNewOpportunities(std::streampos& last_read_pos) {
+    std::ifstream opps_file(kOppStoragePath);
+    if (!opps_file) {
+        std::cerr << "Failed to open opportunities.txt\n";
+        return;
+    }
+    opps_file.seekg(last_read_pos);
+    std::string line;
+    int count = 0;
+    while (std::getline(opps_file, line)) {
+        std::cout << line << std::endl;
+        count++;
+        
+        if (count % 5 == 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+
+        if (count > 8*10) break;
+    }
+    last_read_pos = opps_file.tellg();
+    opps_file.close();
 }
 
 void commandProcessor() {
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
     std::string cmd;
     displayHelp();
-    
-    while (g_running) {
+    std::atomic<bool> is_running = true;
+    std::streampos last_read_pos = 0;
+
+    while (is_running) {
         std::cout << "> ";
         std::getline(std::cin, cmd);
         
@@ -91,27 +127,17 @@ void commandProcessor() {
             displayHelp();
         }
         else if (cmd == "s" || cmd == "start") {
-            g_display_opportunities = true;
-            std::cout << "Started displaying opportunities\n";
-        }
-        else if (cmd == "p" || cmd == "stop") {
-            g_display_opportunities = false;
-            std::cout << "Paused opportunity display\n";
+            std::cout << "Started displaying opportunities\n\n";
+            displayNewOpportunities(last_read_pos); 
         }
         else if (cmd == "m" || cmd == "metrics") {
             displayMetrics();
         }
-        else if (cmd[0] == 'f' && cmd.length() > 1) {
-            try {
-                g_min_profit_filter = std::stoi(cmd.substr(2));
-                std::cout << "Filtering opportunities with profit >= " 
-                         << g_min_profit_filter << " basis points\n";
-            } catch (...) {
-                std::cout << "Invalid filter value. Usage: f <basis_points>\n";
-            }
+        else if (cmd == "y" || cmd == "system") {
+            displaySystemDetails();
         }
         else if (cmd == "q" || cmd == "quit") {
-            g_running = false;
+            is_running = false;
             kill(getpid(), SIGINT);
             break;
         }
@@ -131,13 +157,16 @@ int main() {
         
         std::vector<L2OrderBook> orderbooks(kTotalExchanges);
         std::vector<Opportunity> opportunities;
-        
+        L2OrderBook new_ob;
+
         // Start metrics tracking
         g_metrics.start_time = std::chrono::high_resolution_clock::now();
         
         // Start the main processing thread
         std::thread process_thread(process, std::ref(orderbooks), 
-                                 std::ref(kConfig), std::ref(opportunities));
+                                 std::ref(kConfig), std::ref(opportunities), std::ref(new_ob));
+
+        std::thread db_thread(dbWriterThread, std::ref(opportunities), std::ref(new_ob));
         
         // Connect to exchanges
         connectToEndpoints(kConfig, connections, orderbooks);
@@ -145,25 +174,9 @@ int main() {
         // Start the command processor in a separate thread
         std::thread cmd_thread(commandProcessor);
 
-        // Main loop - handle opportunity display and metrics
-        while (g_running) {
-            if (g_display_opportunities && g_can_print.load(std::memory_order_acquire) && !opportunities.empty()) {
-                int cnt = 0;
-                // need to add versioning here, else same might get repeated
-                for (const auto& opp : opportunities) {
-                    displayOpportunity(opp);
-                    cnt++;
-                    // if(cnt > 5) break;
-                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                }
-                opportunities.clear();
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        
-        // Cleanup
         if (cmd_thread.joinable()) cmd_thread.join();
         if (process_thread.joinable()) process_thread.join();
+        if (db_thread.joinable()) db_thread.join();
         
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;

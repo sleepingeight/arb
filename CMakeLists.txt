@@ -32,8 +32,12 @@ set(SOURCES
 )
 
 add_executable(arb ${SOURCES})
-# target_compile_definitions(arb PRIVATE SIMDJSON_VERBOSE_LOGGING)
-target_compile_definitions(arb PRIVATE FAKE)
+
+option(FAKE "Enable fake mode" OFF)
+if(FAKE)
+    target_compile_definitions(arb PRIVATE FAKE)
+endif()
+
 target_include_directories(arb
     PRIVATE
         ${Boost_INCLUDE_DIRS}

@@ -49,7 +49,7 @@ struct alignas(64) Opportunity {
  * @param out_opps Vector to store found opportunities
  * @note Thread-safe through semaphore synchronization
  */
-void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Opportunity>& out_opps);
+void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Opportunity>& out_opps, L2OrderBook& new_ob);
 
 
 struct Metrics {
@@ -72,3 +72,6 @@ struct Metrics {
                !min_latency_us.compare_exchange_weak(current_min, latency)) {}
     }
 };
+
+
+int dbWriterThread(std::vector<Opportunity>&, L2OrderBook&);
