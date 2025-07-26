@@ -85,10 +85,8 @@ void loadConfig(const std::string& file_path, config& config, simdjson::ondemand
 int getIndex(std::string_view name, int type);
 
 /// @brief Semaphore for synchronizing orderbook updates
-/// @note Binary semaphore used as a signal between WebSocket and processing threads
-extern std::counting_semaphore<2> sem;
+extern std::counting_semaphore<kTotalExchanges> sem;
 
 /// @brief Semaphore for synchronizing database writes
-/// @note Binary semaphore used as a signal between processing and database threads
-extern std::counting_semaphore<2> sem1;
+extern std::counting_semaphore<kTotalExchanges> sem1;
 

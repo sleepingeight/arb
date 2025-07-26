@@ -14,8 +14,8 @@
 #include <iomanip> 
 
 /// @brief Semaphores for synchronizing orderbook updates and database writes
-std::counting_semaphore<2> sem(0);
-std::counting_semaphore<2> sem1(0);
+std::counting_semaphore<kTotalExchanges> sem(0);
+std::counting_semaphore<kTotalExchanges> sem1(0);
 
 /// @brief Global metrics instance for tracking system performance
 Metrics g_metrics;
