@@ -129,6 +129,13 @@ cmake -G Ninja ..
 ninja
 ```
 
+You can also use 
+```bash
+cmake -G Ninja -DFAKE=ON ..
+ninja
+```
+to create fake arbitrage opportunities only to witness what `arb` can do.
+
 ## Configuration
 
 Create a `config.json` file in the `config` directory with the following structure:
@@ -151,7 +158,7 @@ Create a `config.json` file in the `config` directory with the following structu
 ## Usage
 
 1. Configure the system through `config.json`
-2. Run the executable:
+2. Run the executable (when in build folder):
    ```bash
    ./arb
    ```
