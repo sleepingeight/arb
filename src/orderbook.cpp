@@ -14,12 +14,26 @@
 extern struct Metrics g_metrics;
 
 /**
- * Implementation notes:
+ * @brief Main processing function for arbitrage detection
+ * 
+ * Implementation details:
  * - Uses semaphore synchronization for thread safety
  * - Maintains local copy of orderbooks to prevent data races
  * - Calculates VWAP using cumulative quantities and costs
  * - Optimizes memory access with aligned data structures
  * - Processes opportunities in O(n) time per orderbook update
+ * 
+ * Algorithm flow:
+ * 1. Wait for new orderbook data
+ * 2. Copy and process the updated orderbook
+ * 3. Calculate VWAPs for both buy and sell sides
+ * 4. Detect arbitrage opportunities based on profit threshold
+ * 5. Record opportunities with timing information
+ * 
+ * @param orderbooks Vector of orderbooks from different exchanges
+ * @param cfg Trading configuration parameters
+ * @param out_opps Vector to store detected opportunities
+ * @param new_ob Reference to store the latest orderbook update
  */
 void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Opportunity>& out_opps, L2OrderBook& new_ob)
 {
@@ -32,6 +46,7 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
         sem.acquire();
         g_metrics.updates_processed++;
         out_opps.clear();
+        
         int count_new = 0;
         for (size_t i = 0; i < kTotalExchanges; i++) {
             if(orderbooks[i].newData) {
@@ -99,6 +114,7 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
                     double gross_pct = (sell_vwap - buy_vwap) / buy_vwap * 100.0;
                     double net_pct = gross_pct - (cfg.fees[i] + cfg.fees[j]);
                     double net_profit = net_pct * common_qty * buy_vwap / 100.0;
+
                     if (net_profit >= cfg.min_profit) {
                         auto now = std::chrono::high_resolution_clock::now();
                         auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -133,13 +149,23 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
 }
 
 /**
- * Implementation notes:
- * - Uses SQLite transactions for atomic writes
- * - Calculates derived metrics (spread, imbalance)
- * - Handles database errors gracefully
+ * @brief Database writer thread for storing orderbook and opportunity data
+ * 
+ * Implementation details:
+ * - Uses SQLite for orderbook summary storage
+ * - Writes opportunities to text file for analysis
+ * - Uses transactions for atomic database updates
  * - Maintains continuous operation through semaphore synchronization
+ * 
+ * Data stored:
+ * - Orderbook: top prices, quantities, spreads, and imbalances
+ * - Opportunities: full details including profit and timing information
+ * 
+ * @param opportunities Vector of detected arbitrage opportunities
+ * @param ob Latest orderbook state
+ * @return -1 on error, never returns on success
  */
-int dbWriterThread(std::vector<Opportunity>&oppurtunities, L2OrderBook& ob) {
+int dbWriterThread(std::vector<Opportunity>& opportunities, L2OrderBook& ob) {
     sqlite3* db;
     if (sqlite3_open(kDbStoragePath.c_str(), &db)) {
         std::cerr << "DB open failed\n";
@@ -181,7 +207,7 @@ int dbWriterThread(std::vector<Opportunity>&oppurtunities, L2OrderBook& ob) {
     while (true) {
         sem1.acquire();
 
-        local_opps = oppurtunities;
+        local_opps = opportunities;
 
         for (const auto& opp : local_opps) {
             opps_file << "\nArbitrage Opportunity:\n"

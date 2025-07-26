@@ -11,6 +11,11 @@ const int kMaxSize = 50;
  * 
  * Maintains a snapshot of the order book with multiple price levels.
  * Aligned to 64-byte boundary for optimal cache line usage.
+ * 
+ * Memory layout is optimized for sequential access:
+ * - Ask and bid arrays are grouped together
+ * - Price and quantity arrays are adjacent for each side
+ * - Control variables are placed at the end
  */
 struct alignas(64) L2OrderBook {
     double askQuantity[kMaxSize];  ///< Quantities available at ask prices
@@ -28,6 +33,12 @@ struct alignas(64) L2OrderBook {
  * 
  * Contains details about a potential arbitrage opportunity between two exchanges.
  * Aligned to 64-byte boundary for optimal cache line usage.
+ * 
+ * The structure captures:
+ * - Exchange identifiers for both sides
+ * - Price levels used in calculation
+ * - VWAP prices and profit metrics
+ * - Order size and timing information
  */
 struct alignas(64) Opportunity {
     int buy_exchange;    ///< Index of the exchange to buy from
@@ -44,22 +55,46 @@ struct alignas(64) Opportunity {
 
 /**
  * @brief Process orderbooks to find arbitrage opportunities
+ * 
+ * This function continuously monitors orderbooks from multiple exchanges and
+ * identifies profitable arbitrage opportunities using VWAP calculations.
+ * 
  * @param orderbooks Vector of orderbooks from different exchanges
  * @param cfg Trading configuration parameters
  * @param out_opps Vector to store found opportunities
+ * @param new_ob Reference to store the latest processed orderbook
  * @note Thread-safe through semaphore synchronization
  */
 void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Opportunity>& out_opps, L2OrderBook& new_ob);
 
-
+/**
+ * @brief Performance metrics tracking structure
+ * 
+ * Thread-safe structure for tracking various performance metrics:
+ * - Update and opportunity counts
+ * - Latency statistics (min, max, total)
+ * - Runtime tracking
+ * 
+ * All counters are atomic to ensure accurate concurrent updates.
+ */
 struct Metrics {
-    std::atomic<uint64_t> updates_processed{0};
-    std::atomic<uint64_t> opportunities_found{0};
-    std::atomic<uint64_t> total_latency_us{0};
-    std::atomic<uint64_t> max_latency_us{0};
-    std::atomic<uint64_t> min_latency_us{std::numeric_limits<uint64_t>::max()};
-    std::chrono::high_resolution_clock::time_point start_time;
+    std::atomic<uint64_t> updates_processed{0};    ///< Total number of orderbook updates processed
+    std::atomic<uint64_t> opportunities_found{0};  ///< Total number of opportunities detected
+    std::atomic<uint64_t> total_latency_us{0};     ///< Cumulative latency for statistics
+    std::atomic<uint64_t> max_latency_us{0};       ///< Maximum observed latency
+    std::atomic<uint64_t> min_latency_us{std::numeric_limits<uint64_t>::max()};  ///< Minimum observed latency
+    std::chrono::high_resolution_clock::time_point start_time;  ///< Program start time
 
+    /**
+     * @brief Updates latency statistics atomically
+     * 
+     * Updates running statistics including:
+     * - Total latency for average calculation
+     * - Maximum latency using compare-and-swap
+     * - Minimum latency using compare-and-swap
+     * 
+     * @param latency New latency value in microseconds
+     */
     void updateLatency(uint64_t latency) {
         total_latency_us += latency;
         
@@ -73,5 +108,15 @@ struct Metrics {
     }
 };
 
-
-int dbWriterThread(std::vector<Opportunity>&, L2OrderBook&);
+/**
+ * @brief Database writer thread function
+ * 
+ * Continuously writes orderbook summaries and opportunities to persistent storage:
+ * - Orderbook metrics to SQLite database
+ * - Opportunity details to text file
+ * 
+ * @param opportunities Vector of opportunities to write
+ * @param ob Latest orderbook state to summarize
+ * @return -1 on error, never returns on success
+ */
+int dbWriterThread(std::vector<Opportunity>& opportunities, L2OrderBook& ob);

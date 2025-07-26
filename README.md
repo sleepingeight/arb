@@ -153,8 +153,43 @@ Create a `config.json` file in the `config` directory with the following structu
    ```bash
    ./arb
    ```
-3. Monitor the output for identified arbitrage opportunities
-4. Check `orderbook_summary.db` for detailed analytics
+3. You can ask the CLI for displaying opportunities, or the file `storage/opportunities.txt` has the information of all oppurtunities. 
+4. The file: `storage/orderbook_summary.db` has the persistent information of the updates.
+
+### Available Commands
+
+The system provides an interactive command-line interface with the following commands:
+
+- `h` or `help`
+  - Shows the help message listing all available commands
+  - Useful for quick reference during operation
+
+- `s` or `start`
+  - Starts displaying arbitrage opportunities
+  - Shows up to 10 opportunities at a time
+  - Automatically updates with new opportunities
+  - Includes profit percentage, exchange pairs, and trading volumes
+
+- `m` or `metrics`
+  - Displays performance metrics of the system
+  - Shows:
+    * Total runtime in seconds
+    * Number of updates processed
+    * Number of opportunities found
+    * Latency statistics (minimum, average, maximum) in microseconds
+
+- `y` or `system`
+  - Shows detailed system resource usage
+  - Displays:
+    * CPU information (cores and active threads)
+    * Process ID
+    * Memory usage (total, used, and free RAM in MB)
+    * Process resources (user/system CPU time, maximum memory usage)
+
+- `q` or `quit`
+  - Gracefully exits the program
+  - Ensures proper cleanup of WebSocket connections
+  - Saves any pending data to the database
 
 ## Performance Optimization
 
@@ -180,7 +215,3 @@ CREATE TABLE OrderBook (
     imbalance REAL
 );
 ```
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.

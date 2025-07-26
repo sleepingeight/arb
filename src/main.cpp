@@ -13,16 +13,25 @@
 #include <unistd.h>
 #include <iomanip> 
 
-// Synchronisation
+/// @brief Semaphores for synchronizing orderbook updates and database writes
 std::counting_semaphore<2> sem(0);
 std::counting_semaphore<2> sem1(0);
 
-// Performance metrics
+/// @brief Global metrics instance for tracking system performance
 Metrics g_metrics;
 
-// Websocket clients
+/// @brief Vector of WebSocket client connections to exchanges
 std::vector<std::unique_ptr<wsClient>> connections;
 
+/**
+ * @brief Displays detailed system resource usage and performance metrics
+ * 
+ * Shows:
+ * - CPU cores and thread count
+ * - Process ID and resource usage
+ * - System memory statistics
+ * - Process-specific memory usage
+ */
 void displaySystemDetails() {
     struct sysinfo si;
     if (sysinfo(&si) == 0) {
@@ -55,6 +64,9 @@ void displaySystemDetails() {
     }
 }
 
+/**
+ * @brief Displays available CLI commands and their descriptions
+ */
 void displayHelp() {
     std::cout << "\nAvailable Commands:\n"
               << "  h, help     - Show this help message\n"
@@ -65,6 +77,9 @@ void displayHelp() {
               << "\n";
 }
 
+/**
+ * @brief Displays the detailed metrics information
+ */
 void displayMetrics() {
     auto now = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - g_metrics.start_time);
@@ -88,7 +103,15 @@ void displayMetrics() {
     }
     std::cout << "\n";
 }
-
+/**
+ * @brief Displays new arbitrage opportunities from the log file
+ * 
+ * Reads and displays new opportunities that have been logged since the last read.
+ * Limits output to 80 lines (10 opportunities) at a time and adds small delays
+ * to prevent console flooding.
+ * 
+ * @param last_read_pos Reference to the last read position in the file
+ */
 void displayNewOpportunities(std::streampos& last_read_pos) {
     std::ifstream opps_file(kOppStoragePath);
     if (!opps_file) {
@@ -112,8 +135,17 @@ void displayNewOpportunities(std::streampos& last_read_pos) {
     opps_file.close();
 }
 
+/**
+ * @brief Processes user commands in an interactive loop
+ * 
+ * Handles user input and executes corresponding commands:
+ * - help: Display available commands
+ * - start: Show new opportunities
+ * - metrics: Display performance metrics
+ * - system: Show system resource usage
+ * - quit: Exit the program
+ */
 void commandProcessor() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
     std::string cmd;
     displayHelp();
     std::atomic<bool> is_running = true;
@@ -147,6 +179,19 @@ void commandProcessor() {
     }
 }
 
+/**
+ * @brief Main entry point for the arbitrage detection system
+ * 
+ * Program flow:
+ * 1. Load configuration from JSON
+ * 2. Initialize orderbooks and metrics
+ * 3. Start processing thread for opportunity detection
+ * 4. Start database writer thread for logging
+ * 5. Connect to exchanges via WebSocket
+ * 6. Start command processor for user interaction
+ * 7. Clean up on exit
+ * 
+ */
 int main() {
     simdjson::ondemand::parser kParser;
     config kConfig {};
