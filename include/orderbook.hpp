@@ -38,6 +38,8 @@ struct alignas(64) Opportunity {
     double sell_vwap;    ///< Volume-weighted average price for sell
     double profit_pct;   ///< Expected profit percentage
     double order_size;   ///< Size of the order in base currency
+    double detection_latency_us;  ///< Detection latency in microseconds
+    std::chrono::high_resolution_clock::time_point detection_time;  ///< When opportunity was detected
 };
 
 /**
@@ -48,3 +50,25 @@ struct alignas(64) Opportunity {
  * @note Thread-safe through semaphore synchronization
  */
 void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Opportunity>& out_opps);
+
+
+struct Metrics {
+    std::atomic<uint64_t> updates_processed{0};
+    std::atomic<uint64_t> opportunities_found{0};
+    std::atomic<uint64_t> total_latency_us{0};
+    std::atomic<uint64_t> max_latency_us{0};
+    std::atomic<uint64_t> min_latency_us{std::numeric_limits<uint64_t>::max()};
+    std::chrono::high_resolution_clock::time_point start_time;
+
+    void updateLatency(uint64_t latency) {
+        total_latency_us += latency;
+        
+        uint64_t current_max = max_latency_us.load(std::memory_order_relaxed);
+        while (latency > current_max && 
+               !max_latency_us.compare_exchange_weak(current_max, latency)) {}
+        
+        uint64_t current_min = min_latency_us.load(std::memory_order_relaxed);
+        while (latency < current_min && 
+               !min_latency_us.compare_exchange_weak(current_min, latency)) {}
+    }
+};

@@ -7,6 +7,10 @@
 #include <vector>
 #include "sqlite3.h"
 
+// Forward declaration of global variables from main.cpp
+extern struct Metrics g_metrics;
+extern std::atomic<bool> g_can_print;
+
 /**
  * Implementation notes:
  * - Uses semaphore synchronization for thread safety
@@ -15,21 +19,22 @@
  * - Optimizes memory access with aligned data structures
  * - Processes opportunities in O(n) time per orderbook update
  */
-void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Opportunity>& out_opps)
+void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Opportunity>& out_opps, L2OrderBook& new_ob)
 {
     int num_orderboks = orderbooks.size();
     double buy_qty[kMaxSize], buy_cost[kMaxSize];
     double sell_qty[kMaxSize], sell_cost[kMaxSize];
     std::vector<L2OrderBook> local_books(num_orderboks);
+    
     while (true) {
         sem.acquire();
-        bool should_process = false;
+        g_can_print.store(false, std::memory_order_relaxed);
+        g_metrics.updates_processed++;
+        out_opps.clear();
         int count_new = 0;
-        size_t new_data_index = -1;
         for (size_t i = 0; i < kTotalExchanges; i++) {
-            bool is_new = orderbooks[i].newData;
-            if(is_new) {
-                memcpy(&local_books[i], &orderbooks[i], sizeof (L2OrderBook));
+            if(orderbooks[i].newData) {
+                memcpy(&local_books[i], &orderbooks[i], sizeof(L2OrderBook));
                 orderbooks[i].newData = false;
                 count_new = i;
                 break;
@@ -37,6 +42,7 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
         }
 
         int buy_n = 0, sell_n = 0;
+        out_opps.clear();  // Clear previous opportunities
 
         for (int i = 0; i < kTotalExchanges; ++i) {
             if (!cfg.exchanges[i])
@@ -83,6 +89,7 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
                     if (sell_n == 0)
                         continue;
                 }
+                
                 int bi = 0, si = 0;
                 while (bi < buy_n && si < sell_n) {
                     double common_qty = (buy_qty[bi] < sell_qty[si] ? buy_qty[bi] : sell_qty[si]);
@@ -90,22 +97,28 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
                     double sell_vwap = sell_cost[si] / sell_qty[si];
                     double gross_pct = (sell_vwap - buy_vwap) / buy_vwap * 100.0;
                     double net_pct = gross_pct - (cfg.fees[i] + cfg.fees[j]);
-                    if (net_pct >= cfg.min_profit) {
-                        out_opps.push_back({ i, j,
+                    double net_profit = net_pct * common_qty * buy_vwap / 100.0;
+                    if (net_profit >= cfg.min_profit) {
+                        auto now = std::chrono::high_resolution_clock::now();
+                        auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
+                            now - local_books[count_new].t).count();
+                            
+                        out_opps.push_back({
+                            i, j,
                             bi + 1,
                             si + 1,
                             buy_vwap,
                             sell_vwap,
                             net_pct,
-                            common_qty });
-                        Opportunity& o = out_opps.back();
-                        std::cout << "Buy " << o.order_size << " BTC across " << o.buy_levels
-                                  << " asks on exchange " << o.buy_exchange
-                                  << " (VWAP: " << o.buy_vwap << ") and sell across "
-                                  << o.sell_levels << " bids on exchange " << o.sell_exchange
-                                  << " (VWAP: " << o.sell_vwap << "); net profit = "
-                                  << o.profit_pct << "%" << std::endl;
+                            common_qty,
+                            static_cast<double>(latency),
+                            now
+                        });
+
+                        g_metrics.opportunities_found++;
+                        g_metrics.updateLatency(static_cast<uint64_t>(latency));
                     }
+                    
                     if (buy_qty[bi] < sell_qty[si])
                         ++bi;
                     else
@@ -113,9 +126,9 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
                 }
             }
         }
-        std::chrono::high_resolution_clock::time_point end = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - local_books[count_new].t);
-        // std::cout << "" << duration.count() << "" << '\n';    
+        g_can_print.store(true, std::memory_order_relaxed);
+        memcpy(&new_ob, &local_books[count_new], sizeof(L2OrderBook));
+        sem1.release();
     }
 }
 
@@ -126,7 +139,7 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
  * - Handles database errors gracefully
  * - Maintains continuous operation through semaphore synchronization
  */
-int dbWriterThread(L2OrderBook* ob) {
+int dbWriterThread(std::vector<Opportunity>&oppurtunities, L2OrderBook& ob) {
     sqlite3* db;
     if (sqlite3_open("orderbook_summary.db", &db)) {
         std::cerr << "DB open failed\n";
@@ -157,7 +170,6 @@ int dbWriterThread(L2OrderBook* ob) {
 
     while (true) {
         sem1.acquire();
-
         const char* sql = R"(
             INSERT INTO OrderBook (
                 timestamp, topAsk, topAskQty, topBid, topBidQty, midPrice, spread, imbalance
@@ -172,17 +184,17 @@ int dbWriterThread(L2OrderBook* ob) {
     
         sqlite3_exec(db, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
     
-        double topAsk = ob->askPrice[0];
-        double topAskQty = ob->askQuantity[0];
-        double topBid = ob->bidPrice[0];
-        double topBidQty = ob->bidQuantity[0];
+        double topAsk = ob.askPrice[0];
+        double topAskQty = ob.askQuantity[0];
+        double topBid = ob.bidPrice[0];
+        double topBidQty = ob.bidQuantity[0];
     
         double mid = (topAsk + topBid) / 2.0;
         double spread = topAsk - topBid;
         double imbalance = (topBidQty - topAskQty) / (topBidQty + topAskQty + 1e-9);
     
         int idx = 1;
-        auto ts = std::chrono::duration_cast<std::chrono::microseconds>(ob->t.time_since_epoch()).count();
+        auto ts = std::chrono::duration_cast<std::chrono::microseconds>(ob.t.time_since_epoch()).count();
     
         sqlite3_bind_int64(stmt, idx++, ts);
         sqlite3_bind_double(stmt, idx++, topAsk);

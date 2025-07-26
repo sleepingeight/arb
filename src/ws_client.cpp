@@ -29,8 +29,7 @@ wsClient::wsClient(std::string hostname, bool double_in_string,
 {
     uri_ = "wss://" + hostname;
 
-    endpoint_.set_access_channels(websocketpp::log::alevel::all);
-    endpoint_.clear_access_channels(websocketpp::log::alevel::frame_payload);
+    endpoint_.set_access_channels(websocketpp::log::alevel::none);
     endpoint_.set_error_channels(websocketpp::log::elevel::all);
 
     endpoint_.init_asio();
@@ -133,7 +132,7 @@ void wsClient::onMessage(websocketpp::connection_hdl hdl, client::message_ptr ms
                         snapshot_.askPrice[i] = val.get_double();
                     }
                     #ifdef FAKE
-                    snapshot_.askPrice[i] -= 10000;
+                    snapshot_.askPrice[i] -= 2;
                     #endif
                     j++;
                 } else {
