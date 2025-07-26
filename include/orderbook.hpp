@@ -77,7 +77,7 @@ void process(std::vector<L2OrderBook>& orderbooks, config& cfg, std::vector<Oppo
  * 
  * All counters are atomic to ensure accurate concurrent updates.
  */
-struct Metrics {
+struct alignas(64) Metrics {
     std::atomic<uint64_t> updates_processed{0};    ///< Total number of orderbook updates processed
     std::atomic<uint64_t> opportunities_found{0};  ///< Total number of opportunities detected
     std::atomic<uint64_t> total_latency_us{0};     ///< Cumulative latency for statistics

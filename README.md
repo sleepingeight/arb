@@ -1,6 +1,6 @@
 # arb
 
-A high-performance C++ system for real-time cryptocurrency arbitrage across multiple exchanges. The system monitors orderbook data from multiple exchanges and identifies profitable trading opportunities based on price differentials.
+A high-performance C++ system for real-time cryptocurrency arbitrage across multiple exchanges. The system monitors orderbook data from multiple exchanges and identifies profitable trading opportunities based on price differentials, and detects potential arbitrage oppurtunities in sub-milliseconds latency.
 
 ## Features
 
@@ -17,6 +17,8 @@ A high-performance C++ system for real-time cryptocurrency arbitrage across mult
 - P95 Latency: 770 microseconds
 
 Achieved consistent performance of <1ms to detect every oppurtunity from an update.
+Note that this performance is achievied without collection of metrics, if metrics are collected, an increas of 100ms latency is expected, due to the usage of atomic variables in metrics to avoid races.
+
 
 ## Arbitrage Strategy
 
