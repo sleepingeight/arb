@@ -122,6 +122,8 @@ This implementation allows us to:
 
 ## Building
 
+> Due to websocketpp not supporting c++20 and also does not work with newer boost and cmake versions, it is recommended to use cmake version < 4 and boost version - 1.83. This will be fixed soon.
+
 ```bash
 sudo apt install libboost-dev libssl-dev
 mkdir build
